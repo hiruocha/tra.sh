@@ -81,7 +81,7 @@ cmd_ls() {
         /dev/*)
           topdir=$(printf '%s' "$fs" | awk '{print $NF}')
           get_trash
-          [ -d "$trash" ] || return 0
+          [ -d "$trash" ] || continue
           for trashinfo in "$trash"/info/*.trashinfo
           do
             [ -e "$trashinfo" ] || continue
