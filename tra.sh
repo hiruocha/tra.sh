@@ -23,6 +23,45 @@ cmd="${1:-help}"
 [ -n "$1" ] && shift 1
 
 # https://github.com/ko1nksm/url
+urlencode() {
+  LC_ALL=C awk -v space="$SHURL_SPACE" -v eol="$SHURL_EOL" \
+    -v multiline="$SHURL_MULTILINE" '
+    function encode(map, str,   i, len, ret) {
+      len = length(str); ret = ""
+      for (i = 1; i <= len; i++) ret = ret map[substr(str, i, 1)]
+      return ret
+    }
+
+    function fix_eol(eol,   i) {
+      for (i = 1; i < ARGC; i++) gsub(/\r\n/, "\n", ARGV[i])
+      for (i = 1; i < ARGC; i++) gsub(/\n/, eol, ARGV[i])
+    }
+
+    BEGIN {
+      for(i = 0; i < 256; i++) {
+        k = sprintf("%c", i); v = sprintf("%%%02X", i)
+        url[k] = (k ~ /[A-Za-z0-9_.~\/-]/) ? k : v
+      }
+      if (length(space) > 0) uri[" "] = url[" "] = space
+      if (length(eol) > 0) fix_eol(eol)
+    }
+
+    BEGIN {
+      for (i = 1; i < ARGC; i++) print encode(url, ARGV[i])
+      if (ARGC > 1) exit
+      if (multiline) {
+        while (getline) printf "%s", encode(url, $0 "\n")
+        print ""
+      }
+    }
+
+    {
+      print encode(url, $0)
+    }
+  ' "$@"
+}
+
+# https://github.com/ko1nksm/url
 urldecode() {
   LC_ALL=C awk -v space="$SHURL_SPACE" -v eol="$SHURL_EOL" '
     function decode(map, str,   ret) {
@@ -73,6 +112,17 @@ get_trash() {
   fi
 }
 
+get_realpath() {
+  case "$1" in
+    /* )
+      path="$1"
+      ;;
+    * )
+      path=$( cd "$(dirname "$1")" && printf '%s/%s' "$(pwd -P)" "$(basename "$1")" )
+      ;;
+  esac
+}
+
 get_trashinfo_realpath() {
   case $raw_path in
     /* )
@@ -114,6 +164,45 @@ cmd_ls() {
       esac
     done
   } | sort
+}
+
+cmd_put() {
+  [ -n "$1" ] || put_usage
+  [ -e "$1" ] || {
+    printf 'error: %s: No such file or directory\n' "$1" >&2
+    exit 1
+  }
+  get_realpath "$1"
+  topdir=$(df -P "$path" | awk 'NR==2 {print $NF}')
+  get_trash
+  mkdir -p "$trash"/info
+  mkdir -p "$trash"/files
+  filename=$(basename "$path")
+  set -C
+  if [ ! -e "$trash"/info/"$filename".trashinfo ]; then
+    : > "$trash"/info/"$filename".trashinfo
+  else
+    count=1
+    while [ -e "$trash/info/${filename}_$count.trashinfo" ]; do
+      count=$((count + 1))
+    done
+    filename="$filename"_"$count"
+    : > "$trash"/info/"$filename".trashinfo
+  fi
+  set +C
+  printf '[Trash Info]\n' >> "$trash"/info/"$filename".trashinfo
+  if [ "$trash" = "$home_trash" ]; then
+    encode_path=$(urlencode "$path")
+  else
+    encode_path=$(urlencode "${path##"$topdir"/}")
+  fi
+  printf 'Path=%s\n' "$encode_path" >> "$trash"/info/"$filename".trashinfo
+  printf 'DeletionDate=%s\n' "$(date +%Y-%m-%dT%H:%M:%S)" >> "$trash"/info/"$filename".trashinfo
+  mv "$path" "$trash"/files/"$filename" 2>/dev/null || {
+    rm "$trash"/info/"$filename".trashinfo
+    printf 'error: Failed to move %s to trash\n' "$path" >&2
+    exit 1
+  }
 }
 
 cmd_"$cmd" "$@"
