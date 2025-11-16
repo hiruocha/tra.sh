@@ -80,7 +80,7 @@ cmd_ls() {
       case "$fs" in
         /dev/*)
           topdir=$(printf '%s' "$fs" | awk '{print $NF}')
-          find_trash
+          get_trash
           [ -d "$trash" ] || return 0
           for trashinfo in "$trash"/info/*.trashinfo
           do
