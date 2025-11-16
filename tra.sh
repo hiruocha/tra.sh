@@ -74,6 +74,17 @@ get_trash() {
   fi
 }
 
+get_trashinfo_realpath() {
+  case $raw_path in
+    /* )
+      path=$raw_path
+      ;;
+    * )
+      path="$topdir"/"$raw_path"
+      ;;
+  esac
+}
+
 cmd_ls() {
   {
     df -P | tail -n +2 | while read -r fs; do
@@ -85,7 +96,8 @@ cmd_ls() {
           for trashinfo in "$trash"/info/*.trashinfo
           do
             [ -e "$trashinfo" ] || continue
-            path=$(urldecode "$(awk -F '=' '/^Path=/ {print $2; exit}' "$trashinfo")")
+            raw_path=$(urldecode "$(awk -F '=' '/^Path=/ {print $2; exit}' "$trashinfo")")
+            get_trashinfo_realpath
             printf '%s' "$path"
             filename=${trashinfo##*/}
             filename=${filename%.trashinfo}
