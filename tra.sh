@@ -60,8 +60,7 @@ urldecode() {
 }
 
 get_trash() {
-  if [ "$topdir" = "$home_topdir" ]
-  then
+  if [ "$topdir" = "$home_topdir" ]; then
     trash="$home_trash"
   elif
     [ -d "$topdir/.Trash" ] &&
@@ -101,13 +100,9 @@ cmd_ls() {
             printf '%s' "$path"
             filename=${trashinfo##*/}
             filename=${filename%.trashinfo}
-            if
-              [ ! -e "$trash"/files/"$filename" ]
-            then
+            if [ ! -e "$trash"/files/"$filename" ]; then
               printf ' [MISSING]\n'
-            elif
-              [ -d "$trash"/files/"$filename" ]
-            then
+            elif [ -d "$trash"/files/"$filename" ]; then
               printf ' (dir)\n'
             else
               printf '\n'
