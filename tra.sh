@@ -13,10 +13,14 @@
 # You should have received a copy of the GNU General Public License along with this 
 # program. If not, see <https://www.gnu.org/licenses/>. 
 
+set -e
+
 uid=$(id -ru)
 home_trash=${XDG_DATA_HOME:-$HOME/.local/share}/Trash
+home_topdir=$(df -P "$home_trash" | awk 'NR==2 {print $NF}')
 
 cmd="${1:-help}"
+[ -n "$1" ] && shift 1
 
 # https://github.com/ko1nksm/url
 urldecode() {
@@ -55,27 +59,19 @@ urldecode() {
   ' "$@"
 }
 
-list() {
-  [ -d "$trash" ] || return
-  for trashinfo in "$trash"/info/*.trashinfo
-  do
-    [ -e "$trashinfo" ] || continue
-    path=$(urldecode "$(awk -F '=' '/^Path=/ {print $2; exit}' "$trashinfo")")
-    printf '%s' "$path"
-    filename=${trashinfo##*/}
-    filename=${filename%.trashinfo}
-    if
-      [ ! -e "$trash"/files/"$filename" ]
-    then
-      printf ' [MISSING]\n'
-    elif
-      [ -d "$trash"/files/"$filename" ]
-    then
-      printf ' (dir)\n'
-    else
-      printf '\n'
-    fi
-  done
+get_trash() {
+  if [ "$topdir" = "$home_topdir" ]
+  then
+    trash="$home_trash"
+  elif
+    [ -d "$topdir/.Trash" ] &&
+    [ ! -L "$topdir/.Trash" ] &&
+    [ -n "$(find "$topdir/.Trash" -prune -type d -perm -1000)" ]
+  then
+    trash="$topdir"/.Trash/"$uid"
+  else
+    trash="$topdir"/.Trash-"$uid"
+  fi
 }
 
 cmd_ls() {
@@ -84,22 +80,27 @@ cmd_ls() {
       case "$fs" in
         /dev/*)
           topdir=$(printf '%s' "$fs" | awk '{print $NF}')
-          if
-            [ "$topdir" = "$(df -P "$home_trash" | awk 'NR==2 {print $NF}')" ]
-          then
-            trash="$home_trash"
-            list
-          elif
-            [ -d "$topdir/.Trash" ] &&
-            [ ! -L "$topdir/.Trash" ] &&
-            [ -n "$(find "$topdir/.Trash" -prune -type d -perm -1000)" ]
-          then
-            trash="$topdir"/.Trash/"$uid"
-            list
-          else
-            trash="$topdir"/.Trash-"$uid"
-            list
-          fi
+          find_trash
+          [ -d "$trash" ] || return 0
+          for trashinfo in "$trash"/info/*.trashinfo
+          do
+            [ -e "$trashinfo" ] || continue
+            path=$(urldecode "$(awk -F '=' '/^Path=/ {print $2; exit}' "$trashinfo")")
+            printf '%s' "$path"
+            filename=${trashinfo##*/}
+            filename=${filename%.trashinfo}
+            if
+              [ ! -e "$trash"/files/"$filename" ]
+            then
+              printf ' [MISSING]\n'
+            elif
+              [ -d "$trash"/files/"$filename" ]
+            then
+              printf ' (dir)\n'
+            else
+              printf '\n'
+            fi
+          done
           ;;
         *)
           ;;
@@ -108,8 +109,4 @@ cmd_ls() {
   } | sort
 }
 
-case "$cmd" in
-  ls)
-    cmd_ls
-    ;;
-esac
+cmd_"$cmd" "$@"
