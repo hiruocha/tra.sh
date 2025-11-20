@@ -99,82 +99,39 @@ urldecode() {
 }
 
 get_trash() {
-  if [ "$topdir" = "$home_topdir" ]; then
+  if [ "$1" = "$home_topdir" ]; then
     trash="$home_trash"
   elif
-    [ -d "$topdir/.Trash" ] &&
-    [ ! -L "$topdir/.Trash" ] &&
-    [ -n "$(find "$topdir/.Trash" -prune -type d -perm -1000)" ]
+    [ -d "$1/.Trash" ] &&
+    [ ! -L "$1/.Trash" ] &&
+    [ -n "$(find "$1/.Trash" -prune -type d -perm -1000)" ]
   then
-    trash="$topdir"/.Trash/"$uid"
+    trash="$1"/.Trash/"$uid"
   else
-    trash="$topdir"/.Trash-"$uid"
+    trash="$1"/.Trash-"$uid"
   fi
 }
 
 get_realpath() {
   case "$1" in
-    /* )
+    /*)
       path="$1"
       ;;
-    * )
+    *)
       path=$( cd "$(dirname "$1")" && printf '%s/%s' "$(pwd -P)" "$(basename "$1")" )
       ;;
   esac
 }
 
-get_trashinfo_realpath() {
-  case $raw_path in
-    /* )
-      path=$raw_path
-      ;;
-    * )
-      path="$topdir"/"$raw_path"
-      ;;
-  esac
-}
-
-cmd_ls() {
-  {
-    df -P | tail -n +2 | while read -r fs; do
-      case "$fs" in
-        /dev/*)
-          topdir=$(printf '%s' "$fs" | awk '{print $NF}')
-          get_trash
-          [ -d "$trash" ] || continue
-          for trashinfo in "$trash"/info/*.trashinfo
-          do
-            [ -e "$trashinfo" ] || continue
-            raw_path=$(urldecode "$(awk -F '=' '/^Path=/ {print $2; exit}' "$trashinfo")")
-            get_trashinfo_realpath
-            printf '%s' "$path"
-            filename=${trashinfo##*/}
-            filename=${filename%.trashinfo}
-            if [ ! -e "$trash"/files/"$filename" ]; then
-              printf ' [MISSING]\n'
-            elif [ -d "$trash"/files/"$filename" ]; then
-              printf ' (dir)\n'
-            else
-              printf '\n'
-            fi
-          done
-          ;;
-        *)
-          ;;
-      esac
-    done
-  } | sort
-}
-
 cmd_put() {
-  [ -n "$1" ] || put_usage
+  [ -n "$1" ] || usage_put
   [ -e "$1" ] || {
     printf 'error: %s: No such file or directory\n' "$1" >&2
     exit 1
   }
   get_realpath "$1"
   topdir=$(df -P "$path" | awk 'NR==2 {print $NF}')
-  get_trash
+  get_trash "$topdir"
   mkdir -p "$trash"/info
   mkdir -p "$trash"/files
   filename=$(basename "$path")
@@ -192,11 +149,11 @@ cmd_put() {
   set +C
   printf '[Trash Info]\n' >> "$trash"/info/"$filename".trashinfo
   if [ "$trash" = "$home_trash" ]; then
-    encode_path=$(urlencode "$path")
+    encoded_path=$(urlencode "$path")
   else
-    encode_path=$(urlencode "${path##"$topdir"/}")
+    encoded_path=$(urlencode "${path##"$topdir"/}")
   fi
-  printf 'Path=%s\n' "$encode_path" >> "$trash"/info/"$filename".trashinfo
+  printf 'Path=%s\n' "$encoded_path" >> "$trash"/info/"$filename".trashinfo
   printf 'DeletionDate=%s\n' "$(date +%Y-%m-%dT%H:%M:%S)" >> "$trash"/info/"$filename".trashinfo
   mv "$path" "$trash"/files/"$filename" 2>/dev/null || {
     rm "$trash"/info/"$filename".trashinfo
@@ -205,4 +162,51 @@ cmd_put() {
   }
 }
 
-cmd_"$cmd" "$@"
+cmd_ls() {
+  df -P | tail -n +2 | while read -r fs; do
+    case "$fs" in
+      /dev/*)
+        topdir=$(printf '%s' "$fs" | awk '{print $NF}')
+        get_trash "$topdir"
+        [ -d "$trash" ] || continue
+        for trashinfo in "$trash"/info/*.trashinfo
+        do
+          [ -e "$trashinfo" ] || continue
+          raw_path=$(urldecode "$(awk -F '=' '/^Path=/ {print $2; exit}' "$trashinfo")")
+          case $raw_path in
+            /*)
+              path=$raw_path
+              ;;
+            *)
+              path="$topdir"/"$raw_path"
+              ;;
+          esac
+          printf '%s' "$path"
+          filename=${trashinfo##*/}
+          filename=${filename%.trashinfo}
+          if [ ! -e "$trash"/files/"$filename" ]; then
+            printf ' [MISSING]\n'
+          elif [ -d "$trash"/files/"$filename" ]; then
+            printf ' (dir)\n'
+          else
+            printf '\n'
+          fi
+        done
+        ;;
+      *)
+        ;;
+    esac
+  done
+}
+
+case "$cmd" in
+  help)
+    usage
+    ;;
+  ls)
+    cmd_ls | sort
+    ;;
+  put)
+    cmd_put "$@"
+    ;;
+esac
