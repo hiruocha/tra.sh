@@ -166,36 +166,37 @@ cmd_ls() {
   df -P | tail -n +2 | while read -r fs; do
     case "$fs" in
       /dev/*)
-        topdir=$(printf '%s' "$fs" | awk '{print $NF}')
-        get_trash "$topdir"
-        [ -d "$trash" ] || continue
-        for trashinfo in "$trash"/info/*.trashinfo
-        do
-          [ -e "$trashinfo" ] || continue
-          raw_path=$(urldecode "$(awk -F '=' '/^Path=/ {print $2; exit}' "$trashinfo")")
-          case $raw_path in
-            /*)
-              path=$raw_path
-              ;;
-            *)
-              path="$topdir"/"$raw_path"
-              ;;
-          esac
-          printf '%s' "$path"
-          filename=${trashinfo##*/}
-          filename=${filename%.trashinfo}
-          if [ ! -e "$trash"/files/"$filename" ]; then
-            printf ' [MISSING]\n'
-          elif [ -d "$trash"/files/"$filename" ]; then
-            printf ' (dir)\n'
-          else
-            printf '\n'
-          fi
-        done
         ;;
       *)
+        continue
         ;;
     esac
+    topdir=$(printf '%s' "$fs" | awk '{print $NF}')
+    get_trash "$topdir"
+    [ -d "$trash" ] || continue
+    for trashinfo in "$trash"/info/*.trashinfo
+    do
+      [ -e "$trashinfo" ] || continue
+      raw_path=$(urldecode "$(awk -F '=' '/^Path=/ {print $2; exit}' "$trashinfo")")
+      case $raw_path in
+        /*)
+          path=$raw_path
+          ;;
+        *)
+          path="$topdir"/"$raw_path"
+          ;;
+      esac
+      printf '%s' "$path"
+      filename=${trashinfo##*/}
+      filename=${filename%.trashinfo}
+      if [ ! -e "$trash"/files/"$filename" ]; then
+        printf ' [MISSING]\n'
+      elif [ -d "$trash"/files/"$filename" ]; then
+        printf ' (dir)\n'
+      else
+        printf '\n'
+      fi
+    done
   done
 }
 
